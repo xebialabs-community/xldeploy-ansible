@@ -52,3 +52,12 @@ docs/_build/
 
 # PyBuilder
 target/
+
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+*.log
+s101plugin.state
