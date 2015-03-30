@@ -112,6 +112,7 @@ class ConfigurationItem:
         return self.id == other.id and self.type == other.type and self.properties == other.properties
 
     def __contains__(self, item):
+        print "###################################################### %s "% item
         # TODO: use DictDiffer https://github.com/hughdbrown/dictdiffer/blob/master/dictdiffer/__init__.py
         # TODO: manage Password
 
@@ -119,8 +120,8 @@ class ConfigurationItem:
             return False
         if not self.type == item.type:
             return False
-        if not len(self.properties) == len(item.properties):
-            return False
+        #if not len(self.properties) == len(item.properties):
+        #    return False
 
         for k, v in item.properties.iteritems():
             # return false unless is.has_key? k and is[k]==@should.first[k].to_s
@@ -133,6 +134,16 @@ class ConfigurationItem:
 
     def properties(self):
         return self.properties
+
+    def update_with(self, other):
+        for k, v in other.properties.iteritems():
+            if k in self.properties:
+                if isinstance( self.properties[k], list):
+                    self.properties[k] = list(set( self.properties[k] + v))
+                else:
+                    self.properties[k] = v
+            else:
+                self.properties[k]=v
 
     @staticmethod
     def from_xlm(doc, communicator):
@@ -232,6 +243,7 @@ def main():
             type=dict(),
             properties=dict(type='dict', default={}),
             state=dict(default='present', choices=['present', 'absent']),
+            update_mode=dict(default='replace', choices=['add', 'replace']),
         )
     )
 
@@ -255,8 +267,14 @@ def main():
                 if ci in existing_ci:
                     module.exit_json(changed=False)
                 else:
-                    msg = "Update %s, previous %s" % (ci, existing_ci)
-                    repository.update(ci)
+                    update_mode = module.params.get('update_mode')
+                    if update_mode == 'replace':
+                        msg = "[REPLACE] Update %s, previous %s" % (ci, existing_ci)
+                        repository.update(ci)
+                    else:
+                        msg = "[ADD] Update %s, previous %s" % (ci, existing_ci)
+                        existing_ci.update_with(ci)
+                        repository.update(existing_ci)
             else:
                 msg = "Create %s" % ci
                 repository.create(ci)
