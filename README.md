@@ -50,4 +50,4 @@ brand new environment
           members: [Infrastructure/ansible.vm/tomcat/tomcat.vh, Infrastructure/ansible.vm/tomcat, Infrastructure/ansible.vm ]
 
 ```
-
+A complete demo usage using Vagrant is available here: https://github.com/xebialabs-community/xl-deploy-ansible-sample
