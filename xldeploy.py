@@ -63,7 +63,7 @@ class XLDeployCommunicator:
 
     def property_descriptors(self, typename):
         doc = self.do_get("metadata/type/%s" % typename)
-        return {pd.attrib['name']: pd.attrib['kind'] for pd in doc.iter('property-descriptor')}
+        return dict((pd.attrib['name'], pd.attrib['kind']) for pd in doc.getiterator('property-descriptor'))
 
     def __str__(self):
         return "[endpoint=%s, username=%s]" % (self.endpoint, self.username)
@@ -156,7 +156,7 @@ class ConfigurationItem:
             return map(lambda e: e.attrib['ref'], xml)
 
         def map_string_string(xml):
-            return {child.attrib['key']: child.text for child in xml}
+            return dict((child.attrib['key'], child.text) for child in xml)
 
         def ci(xml):
             return xml.attrib['ref']
@@ -164,13 +164,13 @@ class ConfigurationItem:
         def default(xml):
             return xml.text
 
-        properties = {xml.tag: {'SET_OF_STRING': collection_of_string,
+        properties = dict((xml.tag, {'SET_OF_STRING': collection_of_string,
                                 'LIST_OF_STRING': collection_of_string,
                                 'SET_OF_CI': collection_of_ci,
                                 'LIST_OF_CI': collection_of_ci,
                                 'MAP_STRING_STRING': map_string_string,
                                 'CI': ci
-        }.get(descriptors[xml.tag], default)(xml) for xml in doc}
+        }.get(descriptors[xml.tag], default)(xml)) for xml in doc)
 
         return ConfigurationItem(doc.tag, doc.attrib['id'], properties)
 
