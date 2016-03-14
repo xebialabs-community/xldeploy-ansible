@@ -124,11 +124,14 @@ class ConfigurationItem:
         #    return False
 
         for k, v in item.properties.iteritems():
-            # return false unless is.has_key? k and is[k]==@should.first[k].to_s
             if k not in self.properties:
                 return False
-            if not self.properties[k] == v:
-                return False
+            if type(self.properties[k]) is str:
+                if not str(self.properties[k]) == str(v):
+                    return False
+            elif type(self.properties[k]) is list:
+                if not set(v).issubset(set(self.properties[k])):
+                    return False
 
         return True
 
