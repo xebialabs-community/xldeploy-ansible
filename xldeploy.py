@@ -132,7 +132,10 @@ class ConfigurationItem:
             elif type(self.properties[k]) is list:
                 if not set(v).issubset(set(self.properties[k])):
                     return False
-
+            elif type(self.properties[k]) is dict:
+                for item_k, item_v in v.iteritems():
+                    if item_k not in self.properties[k].keys() or str(self.properties[k][item_k]) != str(item_v):
+                        return False
         return True
 
     def properties(self):
