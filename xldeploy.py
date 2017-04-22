@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import itertools
 import base64
 import httplib
 from urlparse import urlparse
@@ -126,6 +127,8 @@ class ConfigurationItem:
         for k, v in item.properties.iteritems():
             if k not in self.properties:
                 return False
+            if type(self.properties[k]) is itertools.imap:
+                self.properties[k] = list(self.properties[k])
             if type(self.properties[k]) is str:
                 if not str(self.properties[k]) == str(v):
                     return False
