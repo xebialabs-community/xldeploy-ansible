@@ -149,6 +149,8 @@ class ConfigurationItem:
             if k in self.properties:
                 if isinstance( self.properties[k], list):
                     self.properties[k] = list(set( self.properties[k] + v))
+                elif isinstance(self.properties[k], dict):
+                    self.properties[k].update(v)
                 else:
                     self.properties[k] = v
             else:
