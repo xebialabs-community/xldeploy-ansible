@@ -16,20 +16,26 @@ brand new environment
   hosts: tomcatserver  
   tasks:
     - name: define node in XLD
-      xldeploy.py:
+      xldeploy:
         id: Infrastructure/ansible.vm
         type: overthere.SshHost
         endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
         properties:
           os: UNIX
           address: "{{ ansible_default_ipv4.address }}"
           username: scott
           password: tiger
     - name : define tomcat server in XLD
-      xldeploy.py:
+      xldeploy:
         id: Infrastructure/ansible.vm/tomcat
         type: tomcat.Server
         endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
         properties:
           home: /opt/tomcat
           startCommand: /etc/init.d/tomcat start
@@ -37,15 +43,21 @@ brand new environment
           startWaitTime: 10
           stopWaitTime: 0
     - name : define tomcat virtual host in XLD
-      xldeploy.py:
+      xldeploy:
         id: Infrastructure/ansible.vm/tomcat/tomcat.vh
         type: tomcat.VirtualHost
         endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
     - name: define test environment
-      xldeploy.py:
+      xldeploy:
         id: Environments/others/tomcat-test
         type: udm.Environment
         endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
         properties:
           members: [Infrastructure/ansible.vm/tomcat/tomcat.vh, Infrastructure/ansible.vm/tomcat, Infrastructure/ansible.vm ]
 

@@ -4,6 +4,7 @@
 import itertools
 import base64
 import httplib
+import ssl
 from urlparse import urlparse
 import xml.etree.ElementTree as ET
 from xml.dom.minidom import Document
@@ -16,10 +17,16 @@ class XLDeployCommunicator:
 
     # TODO Manage 'context'
 
-    def __init__(self, endpoint='http://localhost:4516', username='admin', password='admin', context='deployit'):
+    def __init__(self,
+                 endpoint='http://localhost:4516',
+                 username='admin',
+                 password='admin',
+                 validate_certs=True,
+                 context='deployit'):
         self.endpoint = endpoint
         self.username = username
         self.password = password
+        self.validate_certs = validate_certs
         self.context = context
 
     def do_get(self, path):
@@ -37,21 +44,34 @@ class XLDeployCommunicator:
     def do_it(self, verb, path, doc, parse_response=True):
         # print "DO %s %s on %s " % (verb, path, self.endpoint)
 
+        ssl_context = None
+        if not self.validate_certs:
+            ssl_context = ssl._create_unverified_context()
+
         parsed_url = urlparse(self.endpoint)
         if parsed_url.scheme == "https":
-            conn = httplib.HTTPSConnection(parsed_url.hostname, parsed_url.port)
+            conn = httplib.HTTPSConnection(
+                parsed_url.hostname, parsed_url.port, context=ssl_context)
         else:
             conn = httplib.HTTPConnection(parsed_url.hostname, parsed_url.port)
 
         try:
-            auth = base64.encodestring('%s:%s' % (self.username, self.password)).replace('\n', '')
-            headers = {"Content-type": "application/xml", "Accept": "application/xml", "Authorization": "Basic %s" % auth}
+            auth = base64.encodestring('%s:%s' % (self.username,
+                                                  self.password)).replace(
+                                                      '\n', '')
+            headers = {
+                "Content-type": "application/xml",
+                "Accept": "application/xml",
+                "Authorization": "Basic %s" % auth
+            }
 
             conn.request(verb, "/deployit/%s" % path, doc, headers)
             response = conn.getresponse()
             # print response.status, response.reason
             if response.status != 200 and response.status != 204:
-                raise Exception("Error when requesting XL Deploy Server [%s]:%s" % (response.status, response.reason))
+                raise Exception(
+                    "Error when requesting XL Deploy Server [%s]:%s" %
+                    (response.status, response.reason))
 
             if parse_response:
                 xml = ET.fromstring(str(response.read()))
@@ -61,10 +81,10 @@ class XLDeployCommunicator:
         finally:
             conn.close()
 
-
     def property_descriptors(self, typename):
         doc = self.do_get("metadata/type/%s" % typename)
-        return dict((pd.attrib['name'], pd.attrib['kind']) for pd in doc.getiterator('property-descriptor'))
+        return dict((pd.attrib['name'], pd.attrib['kind'])
+                    for pd in doc.getiterator('property-descriptor'))
 
     def __str__(self):
         return "[endpoint=%s, username=%s]" % (self.endpoint, self.username)
@@ -107,13 +127,17 @@ class ConfigurationItem:
         self.properties = properties
 
     def __str__(self):
-        return "%s %s %s" % (self.id, self.type, dict(map(lambda t: (t[0], "********") if t[0] == "password" else t, self.properties.iteritems())))
+        return "%s %s %s" % (
+            self.id, self.type,
+            dict(
+                map(lambda t: (t[0], "********") if t[0] == "password" else t,
+                    self.properties.iteritems())))
 
     def __eq__(self, other):
         return self.id == other.id and self.type == other.type and self.properties == other.properties
 
     def __contains__(self, item):
-        print "###################################################### %s "% item
+        print "###################################################### %s " % item
         # TODO: use DictDiffer https://github.com/hughdbrown/dictdiffer/blob/master/dictdiffer/__init__.py
         # TODO: manage Password
 
@@ -121,7 +145,7 @@ class ConfigurationItem:
             return False
         if not self.type == item.type:
             return False
-        #if not len(self.properties) == len(item.properties):
+        # if not len(self.properties) == len(item.properties):
         #    return False
 
         for k, v in item.properties.iteritems():
@@ -137,7 +161,8 @@ class ConfigurationItem:
                     return False
             elif type(self.properties[k]) is dict:
                 for item_k, item_v in v.iteritems():
-                    if item_k not in self.properties[k].keys() or str(self.properties[k][item_k]) != str(item_v):
+                    if item_k not in self.properties[k].keys() or str(
+                            self.properties[k][item_k]) != str(item_v):
                         return False
         return True
 
@@ -147,14 +172,14 @@ class ConfigurationItem:
     def update_with(self, other):
         for k, v in other.properties.iteritems():
             if k in self.properties:
-                if isinstance( self.properties[k], list):
-                    self.properties[k] = list(set( self.properties[k] + v))
+                if isinstance(self.properties[k], list):
+                    self.properties[k] = list(set(self.properties[k] + v))
                 elif isinstance(self.properties[k], dict):
                     self.properties[k].update(v)
                 else:
                     self.properties[k] = v
             else:
-                self.properties[k]=v
+                self.properties[k] = v
 
     @staticmethod
     def from_xlm(doc, communicator):
@@ -175,12 +200,13 @@ class ConfigurationItem:
         def default(xml):
             return xml.text
 
-        properties = dict((xml.tag, {'SET_OF_STRING': collection_of_string,
-                                'LIST_OF_STRING': collection_of_string,
-                                'SET_OF_CI': collection_of_ci,
-                                'LIST_OF_CI': collection_of_ci,
-                                'MAP_STRING_STRING': map_string_string,
-                                'CI': ci
+        properties = dict((xml.tag, {
+            'SET_OF_STRING': collection_of_string,
+            'LIST_OF_STRING': collection_of_string,
+            'SET_OF_CI': collection_of_ci,
+            'LIST_OF_CI': collection_of_ci,
+            'MAP_STRING_STRING': map_string_string,
+            'CI': ci
         }.get(descriptors[xml.tag], default)(xml)) for xml in doc)
 
         return ConfigurationItem(doc.tag, doc.attrib['id'], properties)
@@ -230,16 +256,17 @@ class ConfigurationItem:
 
         for key, value in item.properties.iteritems():
             if not key in descriptors:
-                raise Exception("'%s' is not a property of '%s'" % (key, item.type))
+                raise Exception("'%s' is not a property of '%s'" % (key,
+                                                                    item.type))
 
-            base.appendChild(
-                {'SET_OF_STRING': collection_of_string,
-                 'LIST_OF_STRING': collection_of_string,
-                 'SET_OF_CI': collection_of_ci,
-                 'LIST_OF_CI': collection_of_ci,
-                 'MAP_STRING_STRING': map_string_string,
-                 'CI': ci
-                }.get(descriptors[key], default)(doc, key, value))
+            base.appendChild({
+                'SET_OF_STRING': collection_of_string,
+                'LIST_OF_STRING': collection_of_string,
+                'SET_OF_CI': collection_of_ci,
+                'LIST_OF_CI': collection_of_ci,
+                'MAP_STRING_STRING': map_string_string,
+                'CI': ci
+            }.get(descriptors[key], default)(doc, key, value))
 
         return doc.toxml()
 
@@ -250,21 +277,23 @@ def main():
             username=dict(default='admin'),
             password=dict(default='admin'),
             endpoint=dict(default='http://localhost:4516'),
+            validate_certs=dict(required=False, type='bool', default=True),
             id=dict(),
             type=dict(),
             properties=dict(type='dict', default={}),
             state=dict(default='present', choices=['present', 'absent']),
             update_mode=dict(default='replace', choices=['add', 'replace']),
-        )
-    )
+        ))
 
-    communicator = XLDeployCommunicator(module.params.get('endpoint'),
-                                        module.params.get('username'),
-                                        module.params.get('password'))
+    communicator = XLDeployCommunicator(
+        module.params.get('endpoint'), module.params.get('username'),
+        module.params.get('password'), module.params.get('validate_certs'),
+        module.params.get('context'))
 
     repository = RepositoryService(communicator)
     ci_id = module.params.get('id')
-    ci = ConfigurationItem(module.params.get('type'), ci_id, module.params.get('properties'))
+    ci = ConfigurationItem(
+        module.params.get('type'), ci_id, module.params.get('properties'))
 
     msg = ""
     try:
@@ -280,10 +309,12 @@ def main():
                 else:
                     update_mode = module.params.get('update_mode')
                     if update_mode == 'replace':
-                        msg = "[REPLACE] Update %s, previous %s" % (ci, existing_ci)
+                        msg = "[REPLACE] Update %s, previous %s" % (
+                            ci, existing_ci)
                         repository.update(ci)
                     else:
-                        msg = "[ADD] Update %s, previous %s" % (ci, existing_ci)
+                        msg = "[ADD] Update %s, previous %s" % (ci,
+                                                                existing_ci)
                         existing_ci.update_with(ci)
                         repository.update(existing_ci)
             else:
@@ -293,7 +324,9 @@ def main():
         module.exit_json(changed=True, msg=msg)
     except Exception as e:
         # exc_type, exc_value, exc_traceback = sys.exc_info()
-        module.fail_json(msg="Failed to update XLD %s on %s, about ci [%s]:  %s" % (e, communicator, ci, traceback.format_exc()))
+        module.fail_json(
+            msg="Failed to update XLD %s on %s, about ci [%s]:  %s" % (
+                e, communicator, ci, traceback.format_exc()))
 
 
 main()
