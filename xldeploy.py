@@ -275,14 +275,14 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             username=dict(default='admin'),
-            password=dict(default='admin'),
+            password=dict(default='admin', no_log=True),
             endpoint=dict(default='http://localhost:4516'),
             validate_certs=dict(required=False, type='bool', default=True),
             id=dict(),
             type=dict(),
             properties=dict(type='dict', default={}),
             state=dict(default='present', choices=['present', 'absent']),
-            update_mode=dict(default='replace', choices=['add', 'replace']),
+            update_mode=dict(default=None, choices=['add', 'replace']),
         ))
 
     communicator = XLDeployCommunicator(
@@ -305,18 +305,18 @@ def main():
             if repository.exists(ci_id):
                 existing_ci = repository.read(ci_id)
                 if ci in existing_ci:
-                    module.exit_json(changed=False)
-                else:
                     update_mode = module.params.get('update_mode')
                     if update_mode == 'replace':
                         msg = "[REPLACE] Update %s, previous %s" % (
                             ci, existing_ci)
                         repository.update(ci)
-                    else:
+                    elif update_mode == 'add':
                         msg = "[ADD] Update %s, previous %s" % (ci,
                                                                 existing_ci)
                         existing_ci.update_with(ci)
                         repository.update(existing_ci)
+                    else:
+                        module.exit_json(changed=False)
             else:
                 msg = "Create %s" % ci
                 repository.create(ci)
