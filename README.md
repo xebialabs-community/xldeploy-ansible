@@ -70,7 +70,7 @@ The example also adds security to the Environments/others folder with the module
           members: [Infrastructure/ansible.vm/tomcat/tomcat.vh, Infrastructure/ansible.vm/tomcat, Infrastructure/ansible.vm ]
     - name: Add Permissions
       xldeploy_permission:
-        id: Environments/DEV/ANSIBLE
+        id: Environments/others
         role: admins
         permission: "{{ item }}"
         endpoint: http://10.0.2.2:4516
