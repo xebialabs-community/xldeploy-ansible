@@ -5,15 +5,15 @@ This module allows you to use [Ansible](http://www.ansibleworks.com/) to manage 
 
 Usage Examples
 ==============
-The module updates the XL Deploy repository by defining the containers
-that have been managed by Ansible
 
-The example below configure 3 containers in XL Deploy and add them to a
-brand new environment
+The module updates the XL Deploy repository by defining the containers managed by Ansible
 
-```
+The example below configure 3 containers in XL Deploy and add them to a brand new environment.
+The example also adds security to the Environments/others folder with the module xldeploy_permission.
+
+```yaml
 - name: Configure Tomcat Server
-  hosts: tomcatserver  
+  hosts: tomcatserver
   tasks:
     - name: define node in XLD
       xldeploy:
@@ -50,6 +50,14 @@ brand new environment
         username: xldeployuser
         password: MySuperS3cr3tPassw0rd
         validate_certs: False
+    - name: add other environment folder
+      xldeploy:
+        id: Environments/others
+        type: core.Directory
+        endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
     - name: define test environment
       xldeploy:
         id: Environments/others/tomcat-test
@@ -60,6 +68,21 @@ brand new environment
         validate_certs: False
         properties:
           members: [Infrastructure/ansible.vm/tomcat/tomcat.vh, Infrastructure/ansible.vm/tomcat, Infrastructure/ansible.vm ]
+    - name: Add Permissions
+      xldeploy_permission:
+        id: Environments/DEV/ANSIBLE
+        role: admins
+        permission: "{{ item }}"
+        endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: MySuperS3cr3tPassw0rd
+        validate_certs: False
+        state: grant
+      with_items:
+        - deploy#undeploy
+        - deploy#initial
+        - read
 
 ```
-A complete demo usage using Vagrant is available here: https://github.com/xebialabs-community/xl-deploy-ansible-sample
+
+A complete demo usage using Vagrant is available [here](https://github.com/xebialabs-community/xl-deploy-ansible-sample)
