@@ -9,31 +9,27 @@ ANSIBLE_METADATA = {
 
 DOCUMENTATION = '''
 ---
-module: xldeploy_permission
+module: xldeploy_role
 
-short_description: Module to add XLDeploy from Xebialabs Persmissions through its API
+short_description: Module to add XLDeploy from Xebialabs Roles and Principals through its API
 
 version_added: "2.4"
 
 description:
-    - "The module uses the API described under https://docs.xebialabs.com/xl-deploy/7.6.x/rest-api/com.xebialabs.deployit.engine.api.PermissionService.html"
-    - "It uses PUT to Grants Permissions with /security/permission/{permission}/{role}/{id:.*}"
-    - "It uses DELETE to Revoke Permissions with /security/permission/{permission}/{role}/{id:.+}"
-    - "It uses GET to maintain the idempotency and checks the current status with /security/permission/{permission}/{role}/{id:.+}"
+    - "The module uses the API described under https://docs.xebialabs.com/generated/xl-deploy/7.6.x/rest-api/com.xebialabs.deployit.engine.api.RoleService.html"
+    - "It uses PUT to Grants Permissions with /security/role/{role}/{principal} or /security/role/{role}"
+    - "It uses DELETE to Revoke Permissions with /security/role/{role}/{principal} or /security/role/{role}"
+    - "It uses GET to maintain the idempotency and checks the current status with /security/role/ or /security/role/roles/{username}"
 
 options:
-    id:
-        description:
-            - The path of the CI to grant/revoke the permission on.
-        required: true
     role:
         description:
-            - The role to which the permission should be granted/revoked.
+            - The role to be created/deleted
         required: true
-    permission:
+    principal:
         description:
-            - The name of the permission to grant/revoke.
-        required: true
+            - The name of the user or group  to assign/remove the role to
+        required: false
     endpoint:
         description:
             - The name of the enpoint
@@ -58,7 +54,7 @@ options:
         description:
             - Action to Commit
         required: false
-        default: grant
+        default: present
 
 extends_documentation_fragment:
     - xldeploy
@@ -68,24 +64,41 @@ author:
 '''
 
 EXAMPLES = '''
-# Revoke a read Permission for admins under Environments/DEV/ANSIBLE
-- name: Revoke Permissions
-    xldeploy_permission:
-      id: Environments/DEV/ANSIBLE
+# Remove myotheradmin from admins role
+- name: Create Rol / Principal
+    xldeploy_role:
       role: admins
-      permission: read
+      principal: myotheradmin
       endpoint: http://localhost:4516
       username: admin
       password: password
       validate_certs: False
-      state: revoke
+      state: absent
 
-# Grant read permission for admins under Environments/DEV/ANSIBLE
+# Remove ansible role
+- name: Create Rol / Principal
+    xldeploy_role:
+      role: ansible
+      endpoint: http://localhost:4516
+      username: admin
+      password: password
+      validate_certs: False
+      state: absent
+
+# Add admin principal to admins role (Role is created if it doesn't exist)
 - name: Grant Permissions
-    xldeploy_permission:
-      id: Environments/DEV/ANSIBLE
+    xldeploy_role:
       role: admins
-      permission: read
+      principal: admin
+      endpoint: http://localhost:4516
+      username: admin
+      password: password
+      validate_certs: False
+
+# Add admins role only (No Principals associated)
+- name: Grant Permissions
+    xldeploy_role:
+      role: admins
       endpoint: http://localhost:4516
       username: admin
       password: password
@@ -97,13 +110,12 @@ msg:
     description: The operation done after confirming current status
     type: str
     returned: always
-    sample: "Already Revoked [permission] for role *role* on *id*"
+    sample: "Role [role] already present for principal *principal*"
 '''
 
 import itertools
 import base64
 import httplib
-from urllib2 import quote
 import ssl
 from urlparse import urlparse
 import xml.etree.ElementTree as ET
@@ -170,7 +182,11 @@ class XLDeployCommunicator:
 
             if parse_response:
                 xml = ET.fromstring(str(response.read()))
-                return xml.text
+                xmlchild = xml.getchildren()
+                children = []
+                for content in xmlchild:
+                    children.append(content.text)
+                return children
 
             return None
         finally:
@@ -180,21 +196,21 @@ class XLDeployCommunicator:
         return "[endpoint=%s, username=%s]" % (self.endpoint, self.username)
 
 
-class PermissionService:
-    """ Access to the permission REST service"""
+class RoleService:
+    """ Access to the role REST service"""
 
     def __init__(self, communicator=None):
         self.communicator = communicator
 
     def read(self, id):
-        doc = self.communicator.do_get('security/permission/%s' % id)
-        return "true" in doc
+        doc = self.communicator.do_get('security/role/%s' % id)
+        return doc
 
-    def grant(self, id):
-        self.communicator.do_put('security/permission/%s' % id)
+    def create(self, id):
+        self.communicator.do_put('security/role/%s' % id)
 
-    def revoke(self, id):
-        self.communicator.do_delete("security/permission/%s" % id)
+    def delete(self, id):
+        self.communicator.do_delete("security/role/%s" % id)
 
 
 def main():
@@ -204,55 +220,75 @@ def main():
             password=dict(default='admin', no_log=True),
             endpoint=dict(default='http://localhost:4516'),
             validate_certs=dict(required=False, type='bool', default=True),
-            id=dict(type='str', required=True),
             role=dict(type='str', required=True),
-            permission=dict(type='str', required=True),
-            state=dict(default='grant', choices=['revoke', 'grant'])))
+            principal=dict(type='str', required=False),
+            state=dict(default='present', choices=['present', 'absent'])))
 
     communicator = XLDeployCommunicator(
         module.params.get('endpoint'), module.params.get('username'),
         module.params.get('password'), module.params.get('validate_certs'),
         module.params.get('context'))
 
-    repository = PermissionService(communicator)
-    sec_id = module.params.get('id')
-    sec_role = module.params.get('role')
-    sec_perm = module.params.get('permission')
-    sec = "%s/%s/%s" % (quote(sec_perm), sec_role, sec_id)
+    repository = RoleService(communicator)
+    role = module.params.get('role')
+    prin = module.params.get('principal')
+    if prin is None:
+        srvc_get = ""
+        srvc = "%s" % (role)
+    else:
+        srvc_get = "roles/%s" % (prin)
+        srvc = "%s/%s" % (role, prin)
 
     msg = ""
+
     try:
         state = module.params.get('state')
-        if state == 'revoke':
-            existing_sec = repository.read(sec)
-            if existing_sec == True:
-                msg = "Revoking [%s] for role %s on %s" % (sec_perm, sec_role,
-                                                           sec_id)
-                repository.revoke(sec)
-                module.exit_json(changed=True, msg=msg)
+        if state == 'present':
+            existing_item = repository.read(srvc_get)
+            if prin is None:
+                if role in existing_item:
+                    msg = "Role [%s] already present" % (role)
+                    module.exit_json(changed=False, msg=msg)
+                else:
+                    msg = "Creating role [%s]" % (role)
+                    repository.create(srvc)
+                    module.exit_json(changed=True, msg=msg)
             else:
-                msg = "Already Revoked [%s] for role %s on %s" % (sec_perm,
-                                                                  sec_role,
-                                                                  sec_id)
-                module.exit_json(changed=False, msg=msg)
-        elif state == 'grant':
-            existing_sec = repository.read(sec)
-            if existing_sec == False:
-                msg = "Granting [%s] for role %s on %s" % (sec_perm, sec_role,
-                                                           sec_id)
-                repository.grant(sec)
-                module.exit_json(changed=True, msg=msg)
+                if role in existing_item:
+                    msg = "Role [%s] already present for principal %s" % (
+                        role, prin)
+                    module.exit_json(changed=False, msg=msg)
+                else:
+                    msg = "Creating principal %s under role [%s]" % (
+                        prin, role)
+                    repository.create(srvc)
+                    module.exit_json(changed=True, msg=msg)
+        elif state == 'absent':
+            existing_item = repository.read(srvc_get)
+            if prin is None:
+                if role in existing_item:
+                    msg = "Deleting role [%s]" % (role)
+                    repository.delete(srvc)
+                    module.exit_json(changed=True, msg=msg)
+                else:
+                    msg = "Role [%s] already deleted" % (role)
+                    module.exit_json(changed=False, msg=msg)
             else:
-                msg = "Already Granted [%s] for role %s on %s" % (sec_perm,
-                                                                  sec_role,
-                                                                  sec_id)
-                module.exit_json(changed=False, msg=msg)
+                if role in existing_item:
+                    msg = "Deleting principal %s under role [%s]" % (
+                        prin, role)
+                    repository.delete(srvc)
+                    module.exit_json(changed=True, msg=msg)
+                else:
+                    msg = "Role [%s] already delete for principal %s" % (
+                        role, prin)
+                    module.exit_json(changed=False, msg=msg)
         else:
             module.exit_json(changed=False)
     except Exception as e:
         module.fail_json(
-            msg="Failed to update XLD %s on %s, about sec [%s]:  %s" % (
-                e, communicator, sec, traceback.format_exc()))
+            msg="Failed to update XLD %s on %s, about role [%s]:  %s" % (
+                e, communicator, srvc, traceback.format_exc()))
 
 
 if __name__ == '__main__':
