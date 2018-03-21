@@ -65,7 +65,7 @@ author:
 
 EXAMPLES = '''
 # Remove myotheradmin from admins role
-- name: Create Rol / Principal
+- name: Remove Role / Principal
     xldeploy_role:
       role: admins
       principal: myotheradmin
@@ -76,7 +76,7 @@ EXAMPLES = '''
       state: absent
 
 # Remove ansible role
-- name: Create Rol / Principal
+- name: Remove Role
     xldeploy_role:
       role: ansible
       endpoint: http://localhost:4516
@@ -86,7 +86,7 @@ EXAMPLES = '''
       state: absent
 
 # Add admin principal to admins role (Role is created if it doesn't exist)
-- name: Grant Permissions
+- name: Create Role / Principal
     xldeploy_role:
       role: admins
       principal: admin
@@ -96,7 +96,7 @@ EXAMPLES = '''
       validate_certs: False
 
 # Add admins role only (No Principals associated)
-- name: Grant Permissions
+- name: Create Only Role
     xldeploy_role:
       role: admins
       endpoint: http://localhost:4516
@@ -255,12 +255,12 @@ def main():
                     module.exit_json(changed=True, msg=msg)
             else:
                 if role in existing_item:
-                    msg = "Role [%s] already present for principal %s" % (
-                        role, prin)
+                    msg = "Role [%s] already present for principal %s" % (role,
+                                                                          prin)
                     module.exit_json(changed=False, msg=msg)
                 else:
-                    msg = "Creating principal %s under role [%s]" % (
-                        prin, role)
+                    msg = "Creating principal %s under role [%s]" % (prin,
+                                                                     role)
                     repository.create(srvc)
                     module.exit_json(changed=True, msg=msg)
         elif state == 'absent':
@@ -275,13 +275,13 @@ def main():
                     module.exit_json(changed=False, msg=msg)
             else:
                 if role in existing_item:
-                    msg = "Deleting principal %s under role [%s]" % (
-                        prin, role)
+                    msg = "Deleting principal %s under role [%s]" % (prin,
+                                                                     role)
                     repository.delete(srvc)
                     module.exit_json(changed=True, msg=msg)
                 else:
-                    msg = "Role [%s] already delete for principal %s" % (
-                        role, prin)
+                    msg = "Role [%s] already delete for principal %s" % (role,
+                                                                         prin)
                     module.exit_json(changed=False, msg=msg)
         else:
             module.exit_json(changed=False)

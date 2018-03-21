@@ -82,6 +82,17 @@ The example also adds security to the Environments/others folder with the module
         - deploy#undeploy
         - deploy#initial
         - read
+    - name: Create Role / Principal
+      xldeploy_role:
+        role: admins
+        principal: "{{ item }}"
+        endpoint: http://10.0.2.2:4516
+        username: xldeployuser
+        password: pasMySuperS3cr3tPassw0rdsword
+        validate_certs: False
+      with_items:
+        - admin
+        - ansible
 
 ```
 
