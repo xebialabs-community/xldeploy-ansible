@@ -255,4 +255,5 @@ def main():
                 e, communicator, sec, traceback.format_exc()))
 
 
-main()
+if __name__ == '__main__':
+    main()
