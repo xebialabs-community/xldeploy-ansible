@@ -137,7 +137,7 @@ class ConfigurationItem:
         return self.id == other.id and self.type == other.type and self.properties == other.properties
 
     def __contains__(self, item):
-        print "###################################################### %s " % item
+        print("###################################################### %s ") % item
         # TODO: use DictDiffer https://github.com/hughdbrown/dictdiffer/blob/master/dictdiffer/__init__.py
         # TODO: manage Password
 
