@@ -3,14 +3,19 @@
 
 import itertools
 import base64
-import httplib
 import ssl
-from urlparse import urlparse
 import xml.etree.ElementTree as ET
 from xml.dom.minidom import Document
 
 from ansible.module_utils.basic import *
 
+# python 2 workaround
+try:
+    from http.client import HTTPConnection, HTTPSConnection
+    from urllib.parse import urlparse
+except ImportError:
+    from httplib import HTTPConnection, HTTPSConnection
+    from urlparse import urlparse
 
 class XLDeployCommunicator:
     """ XL Deploy Communicator using http & XML"""
@@ -42,7 +47,7 @@ class XLDeployCommunicator:
         return self.do_it("DELETE", path, "", False)
 
     def do_it(self, verb, path, doc, parse_response=True):
-        # print "DO %s %s on %s " % (verb, path, self.endpoint)
+        # print "DO {} {} on {} ".format(verb, path, self.endpoint)
 
         ssl_context = None
         if not self.validate_certs:
@@ -50,31 +55,29 @@ class XLDeployCommunicator:
 
         parsed_url = urlparse(self.endpoint)
         if parsed_url.scheme == "https":
-            conn = httplib.HTTPSConnection(
+            conn = HTTPSConnection(
                 parsed_url.hostname, parsed_url.port, context=ssl_context)
         else:
-            conn = httplib.HTTPConnection(parsed_url.hostname, parsed_url.port)
+            conn = HTTPConnection(parsed_url.hostname, parsed_url.port)
 
         try:
-            auth = base64.encodestring('%s:%s' % (self.username,
-                                                  self.password)).replace(
-                                                      '\n', '')
+            auth = base64.encodestring(('{}:{}'.format(self.username,
+                                                  self.password)).encode()).decode().replace('\n', '')
             headers = {
                 "Content-type": "application/xml",
                 "Accept": "application/xml",
-                "Authorization": "Basic %s" % auth
+                "Authorization": "Basic {}".format(auth)
             }
 
-            conn.request(verb, "/deployit/%s" % path, doc, headers)
+            conn.request(verb, "/deployit/{}".format(path), doc, headers)
             response = conn.getresponse()
             # print response.status, response.reason
             if response.status != 200 and response.status != 204:
                 raise Exception(
-                    "Error when requesting XL Deploy Server [%s]:%s" %
-                    (response.status, response.reason))
+                    "Error when requesting XL Deploy Server [{}]:{}".format(response.status, response.reason))
 
             if parse_response:
-                xml = ET.fromstring(str(response.read()))
+                xml = ET.fromstring(response.read().decode())
                 return xml
 
             return None
@@ -82,12 +85,12 @@ class XLDeployCommunicator:
             conn.close()
 
     def property_descriptors(self, typename):
-        doc = self.do_get("metadata/type/%s" % typename)
+        doc = self.do_get("metadata/type/{}".format(typename))
         return dict((pd.attrib['name'], pd.attrib['kind'])
                     for pd in doc.getiterator('property-descriptor'))
 
     def __str__(self):
-        return "[endpoint=%s, username=%s]" % (self.endpoint, self.username)
+        return "[endpoint={}, username={}]".format(self.endpoint, self.username)
 
 
 class RepositoryService:
@@ -97,25 +100,25 @@ class RepositoryService:
         self.communicator = communicator
 
     def read(self, id):
-        doc = self.communicator.do_get('repository/ci/%s' % id)
+        doc = self.communicator.do_get('repository/ci/{}'.format(id))
         return ConfigurationItem.from_xlm(doc, self.communicator)
 
     def exists(self, id):
-        doc = self.communicator.do_get('repository/exists/%s' % id)
+        doc = self.communicator.do_get('repository/exists/{}'.format(id))
         return "true" in doc.text
 
     def update(self, ci):
         doc = ConfigurationItem.to_xml(ci, self.communicator)
-        updated = self.communicator.do_put('repository/ci/%s' % ci.id, doc)
+        updated = self.communicator.do_put('repository/ci/{}'.format(ci.id), doc)
         return ConfigurationItem.from_xlm(updated, self.communicator)
 
     def create(self, ci):
         doc = ConfigurationItem.to_xml(ci, self.communicator)
-        updated = self.communicator.do_post('repository/ci/%s' % ci.id, doc)
+        updated = self.communicator.do_post('repository/ci/{}'.format(ci.id), doc)
         return ConfigurationItem.from_xlm(updated, self.communicator)
 
     def delete(self, id):
-        self.communicator.do_delete("repository/ci/%s" % id)
+        self.communicator.do_delete("repository/ci/{}".format(id))
 
 
 class ConfigurationItem:
@@ -127,17 +130,17 @@ class ConfigurationItem:
         self.properties = properties
 
     def __str__(self):
-        return "%s %s %s" % (
+        return "{} {} {}".format(
             self.id, self.type,
             dict(
                 map(lambda t: (t[0], "********") if t[0] == "password" else t,
-                    self.properties.iteritems())))
+                    self.properties.items())))
 
     def __eq__(self, other):
         return self.id == other.id and self.type == other.type and self.properties == other.properties
 
     def __contains__(self, item):
-        print("###################################################### %s ") % item
+        print("###################################################### {} ".format(item))
         # TODO: use DictDiffer https://github.com/hughdbrown/dictdiffer/blob/master/dictdiffer/__init__.py
         # TODO: manage Password
 
@@ -148,11 +151,17 @@ class ConfigurationItem:
         # if not len(self.properties) == len(item.properties):
         #    return False
 
-        for k, v in item.properties.iteritems():
+        for k, v in item.properties.items():
             if k not in self.properties:
                 return False
-            if type(self.properties[k]) is itertools.imap:
-                self.properties[k] = list(self.properties[k])
+
+            # python 2 workaround
+            try:
+                if type(self.properties[k]) is itertools.imap:
+                    self.properties[k] = list(self.properties[k])
+            except AttributeError:
+                pass
+
             if type(self.properties[k]) is str:
                 if not str(self.properties[k]) == str(v):
                     return False
@@ -160,7 +169,7 @@ class ConfigurationItem:
                 if not set(v).issubset(set(self.properties[k])):
                     return False
             elif type(self.properties[k]) is dict:
-                for item_k, item_v in v.iteritems():
+                for item_k, item_v in v.items():
                     if item_k not in self.properties[k].keys() or str(
                             self.properties[k][item_k]) != str(item_v):
                         return False
@@ -170,7 +179,7 @@ class ConfigurationItem:
         return self.properties
 
     def update_with(self, other):
-        for k, v in other.properties.iteritems():
+        for k, v in other.properties.items():
             if k in self.properties:
                 if isinstance(self.properties[k], list):
                     self.properties[k] = list(set(self.properties[k] + v))
@@ -237,7 +246,7 @@ class ConfigurationItem:
 
         def map_string_string(doc, key, value):
             node = doc.createElement(key)
-            for k, v in value.iteritems():
+            for k, v in value.items():
                 entry = doc.createElement('entry')
                 entry.attributes['key'] = k
                 entry.appendChild(doc.createTextNode(v))
@@ -254,9 +263,9 @@ class ConfigurationItem:
             node.appendChild(doc.createTextNode(str(value)))
             return node
 
-        for key, value in item.properties.iteritems():
+        for key, value in item.properties.items():
             if not key in descriptors:
-                raise Exception("'%s' is not a property of '%s'" % (key,
+                raise Exception("'{}' is not a property of '{}'".format(key,
                                                                     item.type))
 
             base.appendChild({
@@ -299,33 +308,33 @@ def main():
     try:
         state = module.params.get('state')
         if state == 'absent':
-            msg = "Delete %s" % ci
+            msg = "Delete {}".format(ci)
             repository.delete(ci.id)
         elif state == 'present':
             if repository.exists(ci_id):
                 existing_ci = repository.read(ci_id)
-                if ci in existing_ci:
-                    module.exit_json(changed=False)
+                update_mode = module.params.get('update_mode')
+                if update_mode == 'replace':
+                    msg = "[REPLACE] Update {}, previous {}".format(
+                        ci, existing_ci)
+                    repository.update(ci)
                 else:
-                    update_mode = module.params.get('update_mode')
-                    if update_mode == 'replace':
-                        msg = "[REPLACE] Update %s, previous %s" % (
-                            ci, existing_ci)
-                        repository.update(ci)
+                    if ci in existing_ci:
+                        module.exit_json(changed=False)
                     else:
-                        msg = "[ADD] Update %s, previous %s" % (ci,
+                        msg = "[ADD] Update {}, previous {}".format(ci,
                                                                 existing_ci)
-                        existing_ci.update_with(ci)
-                        repository.update(existing_ci)
+                    existing_ci.update_with(ci)
+                    repository.update(existing_ci)
             else:
-                msg = "Create %s" % ci
+                msg = "Create {}".format(ci)
                 repository.create(ci)
 
         module.exit_json(changed=True, msg=msg)
     except Exception as e:
         # exc_type, exc_value, exc_traceback = sys.exc_info()
         module.fail_json(
-            msg="Failed to update XLD %s on %s, about ci [%s]:  %s" % (
+            msg="Failed to update XLD {} on {}, about ci [{}]:  {}".format(
                 e, communicator, ci, traceback.format_exc()))
 
 
